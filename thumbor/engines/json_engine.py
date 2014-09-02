@@ -9,14 +9,18 @@
 # Copyright (c) 2011 globo.com timehome@corp.globo.com
 
 import json
+from colormath.color_objects import sRGBColor, HSLColor
+from colormath.color_conversions import convert_color
 
 from thumbor.engines import BaseEngine
+from thumbor.ext.filters import _fill
 
 
 class JSONEngine(BaseEngine):
 
     def __init__(self, engine, path, callback_name=None):
         super(JSONEngine, self).__init__(engine.context)
+        self._rgb = None
         self.engine = engine
         self.width, self.height = self.engine.size
         self.path = path
@@ -116,6 +120,22 @@ class JSONEngine(BaseEngine):
     def convert_to_grayscale(self):
         pass
 
+    def _get_rgb(self):
+        if self._rgb:
+            return self._rgb
+        mode, data = self.image_data_as_rgb()
+        self._rgb = _fill.apply(mode, data)
+        return self._rgb
+
+    def get_median_color(self):
+        r, g, b = self._get_rgb()
+        return '#%02x%02x%02x' % (r, g, b)
+
+    def get_black_percent(self):
+        r, g, b = self._get_rgb()
+        hsl = convert_color(sRGBColor(r, g, b), HSLColor)
+        return hsl.hsl_l / 255
+
     def read(self, extension, quality):
         target_width, target_height = self.get_target_dimensions()
         thumbor_json = {
@@ -129,7 +149,11 @@ class JSONEngine(BaseEngine):
                 "target": {
                     "width": target_width,
                     "height": target_height
-                }
+                },
+                "median_color": {
+                    "hex": self.get_median_color(),
+                    "white_percent": round(self.get_black_percent(), 3)
+                },
             }
         }
 
